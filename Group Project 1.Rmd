@@ -1,0 +1,404 @@
+---
+title: "Linear Model LM - Predicting Bike Sharing Demand in the Cities"
+author: "Modupeola Fagbenro, Crystal Kao, Guruksha Gurnani, Shanun Randev"
+# date: "today"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    code_folding: hide
+    number_sections: false
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+---
+#Reading CSV file and Displaying Data Dimensions
+
+```{r, setup= FALSE} 
+#Loading libraries
+library(tidyverse)
+library(psych)
+library(ggthemes)
+library(ggplot2) #for data visualization
+library(dplyr) #for data manipulation
+library(tidyr) #for tidying the data
+library(corrgram)
+library(lubridate)
+library(caret)
+library(corrplot)
+
+#Reading the CSV file into data frame
+train_data <- read.csv('train.csv', stringsAsFactors = FALSE)
+test_data <- read.csv("test.csv", stringsAsFactors =  FALSE)
+ 
+## Getting Data Frame dimensions
+#displaying shape, number of columns, rows and first few rows of the data set
+head(train_data)
+nrow(train_data)  # Number of rows, 10866
+ncol(train_data)  # Number of columns, 12
+
+#Basic information about Data Frame
+str(train_data)
+```
+
+```{r summary}
+summary(train_data) #summary statistics for the data frame
+```
+
+```{r , include='FALSE'}
+describe(train_data)
+```
+# ATTRIBUTES OF DATA:
+- date_time: records time and date
+- season : season (1:spring, 2:summer, 3:fall, 4:winter)
+- holiday : whether day is holiday or not 
+- weekday : day of the week
+- workingday : if day is neither weekend nor holiday is 1, otherwise is 0.
++ weathersit : 
+    - 1: Clear, Few clouds, Partly cloudy
+    - 2: Mist + Cloudy, Mist + Broken clouds, Mist + Few clouds, Mist
+    - 3: Light Snow, Light Rain + Thunderstorm + Scattered clouds, Light Rain + Scattered clouds
+    - 4: Heavy Rain + Ice Pallets + Thunderstorm + Mist, Snow + Fog
+- temp : Normalized temperature in Celsius. The values are derived via (t-t_min)/(t_max-t_min), t_min=-8, t_max=+39 (only in hourly scale)
+- atemp: Normalized feeling temperature in Celsius. The values are derived via (t-t_min)/(t_max-t_min), t_min=-16, t_max=+50 (only in hourly scale)
+- hum: Normalized humidity. The values are divided to 100 (max)
+- windspeed: Normalized wind speed. The values are divided to 67 (max)
+- casual: count of casual users
+- registered: count of registered users
+- cnt: count of total rental bikes including both casual and registered
+
+### The goal of normalization is to transform features to be on a similar scale. This improves the performance and training stability of the model.
+
+#  Conducting Univariate Analysis 
+
+### Plotting Continuous Data, Temperature
+
+```{r plots, echo='FALSE'}
+ggplot(train_data,aes(x=temp))+
+  geom_histogram(binwidth = 0.02, fill = "blue",color="black")+
+  geom_density(aes(y = after_stat(scaled)), color = "red")+
+  labs(title = "Distribution of Temperature") +
+  xlab("Temperature") +
+  ylab("density")
+```
+
+```{r plot1, echo= 'FALSE'}
+ggplot(train_data, aes(temp, count)) + geom_point(alpha = 0.3, aes(color = temp)) + theme_bw()
+```
+
+```{r plot2, echo='FALSE'}
+
+ggplot(train_data, aes(humidity, count)) + geom_point(alpha = 0.3, aes(color = humidity)) + theme_bw()
+
+```
+Observations:
+- Every time a bike is shared, the temperature is noted
+- Most people won't rent a bike when it is too hot or too cold. More bikes are rented when the temperature is pleasant.
+- A high number of bikes are rented when the temperature is around 16 degree celsius and 26 degree celsius.
+
+```{r, include='FALSE'}
+
+ggplot(train_data, aes(registered, count))+ geom_point(aes(color= humidity)) + theme_light() +
+  labs(x = "Register bike Users", 
+       y = "Number of Bike Users",
+       title = "Register Bike Users Vs Number of bike users During Favourable Weather")
+
+```
+
+#### Box_Plot gives us the following information:
+- Minimum
+- First Quartile
+- Median
+- Third Quartile
+- Maximum
+```{r boxplot, echo='FALSE'}
+library(ggplot2)
+
+#creating box plot for "temp" column
+ggplot(train_data,aes(y=temp))+
+  geom_boxplot(fill="blue",color="black")+
+  labs(title = "Boxplot for temperature")+
+  ylab("Temperature")
+```
+- Observation : Outliers are 1.5*IQR more than 3rd Quartile or 1.5*IQR less than 1st Quartile 
+
+##Checking Number of Casual Users of Bikes
+```{r, include='FALSE'}
+ggplot(train_data, aes(x = casual)) + geom_histogram(bins=20,alpha=0.5,fill='red') +
+  labs(x= "Casual", 
+       y = "Number of Biker Users",
+       title= "Casual Bike Users vs Number of Bike Users")
+
+```
+### Instances of bike sharing across seasons
+
+- Getting unique values in the 'season' column
+
+```{r categorical_variable, echo= 'FALSE'}
+library(ggplot2)
+train_data$season <- as.factor(train_data$season)
+unique(train_data$season) #gives us an array of [1,2,3,4]
+#finding the count of the array of seasons
+# 1: Spring , 2:Summer, 3: Fall, 4:Winter
+table(train_data$season)
+#based on the output here are the counts:
+# 1: 2686 , 2: 2733 , 3: 2733, 4: 2734
+ggplot(train_data, aes(x = factor(season), fill = factor(season))) +
+  geom_bar() +
+  labs(
+    title = "Bike Sharing Across Seasons",
+    x = "Season",
+    y = "Count",
+    fill = "Season"
+  ) +
+  scale_fill_brewer(palette = "Set2")
+```
+## Conducting Bivariate Analysis
+
+### Plotting Continuous Data vs Continuous Data
+
+### Are Temp and ATemp related ? Is there relationship between the two ?
+
+```{r Continuous Data vs Continuous Data, echo= 'FALSE'}
+library(ggplot2)
+
+#Create a joint scatter plot for 'temp' vs 'atemp'
+plot <- ggplot(train_data, aes(x=temp, y=atemp))+
+  geom_point()+
+  labs(title="Temp vs Atemp")
+
+print(plot)
+
+# Working on Correlation
+correlation <- cor(train_data$temp, train_data$atemp)
+#rounding the correlation coefficient to two decimal places
+rounded_correlation <- round(correlation,2)
+#printing the rounded_correlation 
+cat("Correlation between 'temp' and 'atemp': ", rounded_correlation)
+```
+Observation: 
+- Temp and atemp have a positive linear relation
+- Correlation is 0.99
+- 0 correlation doesn't mean no relation, it means no linear relation
+- We would need to see the plot as well and not rely simply on correlation
+
+##Showing Correlation Heatmap among the Numeric Virables 
+
+```{r, include='FALSE'}
+library(dplyr)
+numeric_train_data <- train_data %>% select_if(is.numeric)
+cor_matrix <- cor(numeric_train_data)
+
+heatmap(cor_matrix, 
+        col = colorRampPalette(c("blue", "white", "red"))(20),
+        main = "Correlation Heatmap")
+```
+```{r, include='FALSE'}
+library(dplyr)
+numeric_train_data <- train_data %>% select_if(is.numeric)
+cor_matrix <- cor(numeric_train_data)
+
+# Create the correlation plot
+corrplot(cor_matrix, method = "color", type = "lower", tl.cex = 0.7)
+
+# Add correlation values as text
+text_col <- colorRampPalette(c("blue", "white", "red"))(100)
+corrplot(cor_matrix, type = "lower", tl.col = "black", tl.srt = 45, col = text_col)
+
+# Add a title to the plot
+title("Correlation Matrix", line = 2)
+```
+
+
+### Plotting Categorical vs Continuous Variable
+
+##### Boxplots of Continuous Variable over the Categorical Variable
+
+### Plotting number of bikes rentend across four seasons
+
+```{r Categorical Data vs Continuous Data, echo= 'FALSE'}
+library(ggplot2)
+
+#Create a joint scatter plot for 'temp' vs 'atemp'
+train_data$season <- as.factor(train_data$season)
+
+# Create a box plot for 'cnt' by 'season'
+ggplot(train_data, aes(x = season, y = count, fill = season, group = season)) +
+  geom_boxplot() +
+  labs(title = "Total # Bikes Rented By Seasons") +
+  scale_fill_brewer(palette = "Set2") +
+  xlab("Season") +
+  ylab("Total # Bikes Rented")
+
+```
+Observation:
+- The cant column is an important column for analysis and the outliers are good for the business because we are working with Bike Sharing Data. So, we will not treat them.
+
+####Predicting Number of bike Users Using Temperature
+###checking Linear relationship between the two virable 
+
+```{r Predict number of Bike Users vs Temperature, include='FALSE'}
+linmod <- lm(temp ~ count, data= train_data)
+
+ggplot(train_data, aes(count, temp)) +
+  geom_point() +
+  theme_light() + 
+  labs(x= "temp", 
+       y= "count",
+       title= "Temp vs Counts")
+```
+
+###Feature Selection for modeling  
+
+```{r Feature Selection, include='FALSE'}
+train_data$datetime <- as.POSIXct(train_data$datetime)
+
+
+extract_feature <- function(df) {
+  df <- df %>%
+    mutate(
+      year = year(datetime),
+      day = day(datetime),
+      month = month(datetime),
+      hour = hour(datetime),
+      dayofweek = wday(datetime) - 1  
+    )
+  
+  return(df)
+}
+
+
+
+train_data <- extract_feature(train_data)
+
+print(train_data)
+```
+##Filtering for 2011
+
+```{r Filtering For 2011 Rentals, include='FALSE'}
+
+df_2011 <- train_data %>% filter(year(datetime) == 2011)
+
+
+daily_counts <- df_2011 %>%
+  group_by(date = as.Date(datetime)) %>%
+  summarise(count = sum(count))
+
+
+ggplot(data = daily_counts, aes(x = date, y = count)) +
+  geom_bar(stat = "identity", fill = "red") +
+  labs(x = "Date", y = "Rental Count", title = "Daily Rentals for 2011") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme_minimal()
+```
+
+```{r Filtering for 2012 Rentals, include='FALSE'}
+##Filtering for 2012
+df_2012 <- train_data %>% filter(year(datetime) == 2012)
+
+
+ggplot() +
+  geom_line(data = df_2011, aes(x = datetime, y = count, color = "2011"), size = 1) +
+  geom_line(data = df_2012, aes(x = datetime, y = count, color = "2012"), size = 1) +
+  scale_color_manual(values = c("2011" = "navy", "2012" = "brown")) +
+  labs(x = "Date", y = "Rental Count", title = "2011 and 2012 Rentals") +
+  theme_minimal() +
+  theme(legend.title = element_blank()) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_x_datetime(date_labels = "%Y-%m-%d", date_breaks = "1 month") +
+  guides(color = guide_legend(title = "Year"))
+
+
+train_data <- train_data %>% select(-datetime)
+
+
+training_df <- train_data[, !colnames(train_data) %in% "count"]
+
+label <- train_data$count
+
+
+# install.packages("caret")
+
+
+
+set.seed(101)
+
+
+
+index <- createDataPartition(y = label, p = 0.2, list = FALSE)
+
+X_train <- training_df[index, ]
+X_val <- training_df[-index, ]
+y_train <- label[index]
+y_val <- label[-index]
+
+
+
+
+lm_model <- lm(y_train ~ ., data = X_train)
+
+print(summary(lm_model))
+
+
+predictions <- predict(lm_model, newdata = X_val)
+
+rmse <- sqrt(mean((predictions - y_val)^2))
+
+cat("Root Mean Squared Error (RMSE):", rmse, "\n")
+
+
+results <- cbind(predictions, y_val)
+
+
+
+
+
+
+test_data$datetime <- as.POSIXct(test_data$datetime)
+
+
+
+
+
+
+
+
+
+test_data <- extract_feature(test_data)
+
+datetime <- test_data$datetime
+
+
+
+test_data <- test_data %>% select(-datetime)
+
+```
+
+```{r, include='FALSE'}
+casual <- train_data$casual
+registered <- train_data$registered
+
+# Assuming casual and registered vectors need to match the length of test_data
+casual <- casual[1:nrow(test_data)]
+registered <- registered[1:nrow(test_data)]
+
+test_data$casual <- casual
+test_data$registered <- registered
+
+test_data$season <- as.numeric(test_data$season)
+test_data$season <- as.factor(test_data$season)
+
+
+test_data <- test_data %>% select(season, holiday, workingday, weather, temp, atemp, humidity, windspeed, casual, registered, year, day, month, hour, dayofweek)
+
+predictions_test <- predict(lm_model, newdata = test_data)
+
+
+```
+
+```{r, include='FALSE'}
+
+```
+  
