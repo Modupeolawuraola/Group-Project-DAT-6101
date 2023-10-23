@@ -186,7 +186,7 @@ Observation:
 
 ##Showing Correlation Heatmap among the Numeric Virables 
 
-```{r, include='FALSE'}
+```{r Correlation}
 library(dplyr)
 numeric_train_data <- train_data %>% select_if(is.numeric)
 cor_matrix <- cor(numeric_train_data)
@@ -195,7 +195,7 @@ heatmap(cor_matrix,
         col = colorRampPalette(c("blue", "white", "red"))(20),
         main = "Correlation Heatmap")
 ```
-```{r, include='FALSE'}
+```{r, Correlation V2}
 library(dplyr)
 numeric_train_data <- train_data %>% select_if(is.numeric)
 cor_matrix <- cor(numeric_train_data)
