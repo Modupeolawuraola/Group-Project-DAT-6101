@@ -411,7 +411,30 @@ predictions_test <- predict(lm_model, newdata = test_data)
 
 ```
 
-```{r, include='FALSE'}
+```{r}
+par(mfrow = c(2,2))
+plot(lm_model)
+```
+```{r}
+X_train2 <- X_train[-c(31,2,9),]
+y_train2 <- y_train[-c(31,2,9)]
+
+
+lm_model2 <- lm(y_train2 ~ ., data = X_train2)
+summary(lm_model2)
 
 ```
-  
+```{r}
+par(mfrow = c(2,2))
+plot(lm_model2)
+```
+
+```{r}
+lm_model3 <- lm(log(y_train) ~ ., data = X_train)
+summary(lm_model3)
+```
+
+```{r}
+par(mfrow = c(2,2))
+plot(lm_model3)
+```
