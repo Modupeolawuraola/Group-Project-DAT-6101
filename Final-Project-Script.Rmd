@@ -305,4 +305,98 @@ summary(log.bestglm$BestModels)
 The best model has AIC of 2082, with only variables `season`, `windspeed` and `workingday`.  Although this AIC is quite high, this is the model that has the best fit for predicting if it's a holiday.
 
 
+```{r warning=FALSE}
+
+library(ggplot2)
+library(ISLR)
+p1 <- ggplot(training_df,aes(temp, count, color = season))
+print(p1 + geom_point(size = 4))
+
+```
+
+
+## decision tree
+
+
+```{r warning=FALSE}
+
+table(training_df$workingday)
+
+copied_df = data.frame(training_df)
+
+
+
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+
+
+
+
+copied_df = copied_df[, -c(1,4)]
+
+train_percentage <- 0.8
+
+# Generate random indices for the training set
+indices <- sample(1:nrow(copied_df), size = round(train_percentage * nrow(copied_df)), replace = FALSE)
+
+# Create the training set
+train_set <- copied_df[indices, ]
+
+# Create the testing set
+test_set <- copied_df[-indices, ]
+
+
+train_features <- train_set[, -which(names(train_set) == "temp")]
+train_target <- train_set$temp
+
+# Separate features and target in the testing set
+test_features <- test_set[, -which(names(test_set) == "temp")]
+test_target <- test_set$temp
+
+
+tree <- rpart(train_target ~ .,method = 'anova', data = train_features,minsplit = 5)
+
+predictions <- predict(tree, newdata = test_features)
+
+rmse <- sqrt(mean((test_target - predictions)^2))
+
+# Display the RMSE
+print(paste("Root Mean Squared Error:", rmse))
+
+
+printcp(tree)
+
+
+
+prp(tree)
+
+
+```
+
+```{r}
+
+rf.model <- randomForest(train_target ~ ., method = 'anova', data = train_features)
+
+
+predictions_rfm <- predict(rf.model, newdata = test_features)
+
+rmse_rfm <- sqrt(mean((test_target - predictions_rfm)^2))
+
+print(rf.model)
+
+print(paste("Root Mean Squared Error for rfm:", rmse_rfm))
+
+
+print(rmse_rfm)
+varImpPlot(rf.model)
+
+
+```
+
+
+
+
+
+
 
